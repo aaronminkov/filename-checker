@@ -1,0 +1,143 @@
+#!/bin/sh
+
+IFS=$'\n' # allow spaces in filnamess without causing a newline
+D=""  # directory we will search
+
+containsElement () {
+  local e match="$1"
+  shift
+  for e; do [[ "$e" == "$match" ]] && return 0; done
+  return 1
+}
+
+validateNamesBasic () {
+    local directory="$1"
+    previousFiles=()
+    printedWords=()
+    if [ ! -r "$directory" ]
+    then
+        echo "The directory $directory cannot be read." >&2
+        exit
+    fi
+    if [ "$directory" = ${directory%/} ]
+    then
+        directory="$directory/"
+    fi
+    local sor=`find "$directory" -maxdepth 1 -exec basename {} \; | tail -n +2`
+    for fn in $sor
+    do
+        local valid=true
+        if [ ! -z "`echo "$fn" | grep -E '[^A-Za-z._-]'`" ]
+        then
+            valid=false
+        fi
+        if [ ! -z "`echo "$fn" | grep -E '^-'`" ]
+        then
+            valid=false
+        fi
+        if [ ! -z "`echo "$fn" | awk '14 < length'`" ]
+        then
+            valid=false
+        fi
+        if [ ! -z "`echo "$fn" | grep -E -v '(^\.$|^\.\.$)' | grep -E '^\.'`" ]
+        then
+            valid=false
+        fi
+        # Find case sensitive duplicates
+        for previous in "${previousFiles[@]}"
+        do
+            shopt -s nocasematch
+            if [[ "$fn" == "$previous" ]]
+            then
+                if  ! containsElement "$previous" "${printedWords[@]}";
+                then
+                    local val="$directory$previous"
+                    if [ ! -L "$val" ] && [ -d "$val" ]
+                    then
+                        echo "$val/"
+                    else
+                        echo "$directory$previous"
+                    fi
+                    printedWords+=($fn)
+                fi
+                valid=false
+                break
+            fi
+            shopt -s nocasematch
+        done
+        if [ $valid == false ]
+        then
+            if [ ! -L "$directory$fn" ] && [ -d "$directory$fn" ]
+            then
+                echo "$directory$fn/"
+            else
+                echo "$directory$fn"
+            fi
+            printedWords+=($fn)
+        fi
+        previousFiles+=($fn)
+    done
+}
+
+validateNamesRecursive () {
+    local directory="$1"
+    if [ "$directory" = ${directory%/} ]
+    then
+        directory="$directory/"
+    fi
+    validateNamesBasic $directory
+    local sor=`find "$directory" -maxdepth 1 -exec basename {} \; | tail -n +2`
+    for fn in $sor
+    do
+        if [ ! -L "$directory$fn" ] && [ -d "$directory$fn" ]
+        then
+            validateNamesRecursive "$directory$fn"
+        fi
+    done
+}
+
+if [ $# == 0 ]
+then
+    D="."
+    validateNamesBasic "$D"
+elif [ $# == 1 ]
+then
+    if [ $1 = "-r" ]
+    then
+        D="."
+        validateNamesRecursive "$D" # call recursive function instead of basic
+        break
+    elif { [ -L "$1" ] ||  ! [ -d "$1" ]; };
+    then
+        echo "Input argument D must be a directory." >&2
+        exit 1
+    elif [ $1 != ${1#-} ]
+    then
+        echo "Input argument D must not start with '-'." >&2
+        exit 2
+    else
+        D="$1"
+        validateNamesBasic "$D"
+    fi
+elif [ $# == 2 ]
+then
+    if [ "$1" != "-r" ]
+    then
+        echo "Make sure '-r' is the first argument if using recursion." >&2
+        exit 3
+    elif { [ -L "$2" ] ||  ! [ -d "$2" ]; };
+    then
+        echo "Input argument D must be a directory." >&2
+        exit 1
+    elif [ $2 != ${2#-} ]
+    then
+        echo "Input argument D must not start with '-'." >&2
+        exit 2
+    else
+        D="$2"
+        validateNamesRecursive "$D" # call recursive function instead of basic
+        fi
+else
+    echo "Invalid number of arguments." >&2
+    exit 4
+fi

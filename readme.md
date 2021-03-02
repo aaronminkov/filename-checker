@@ -1,4 +1,6 @@
-For poornames, I designed a program that is split into two different functions:
+# Filename Checker 
+
+For 'poornames' filename checker, I designed a program that is split into two different functions:
 validateNamesBasic and validateNamesRecursive.
 
 Another function that I created to use as a utility is containsElement.
